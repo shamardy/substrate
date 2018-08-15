@@ -281,8 +281,13 @@ impl<Block: BlockT> backend::BlockImportOperation<Block> for BlockImportOperatio
 		self.pending_authorities = Some(authorities);
 	}
 
-	fn update_storage(&mut self, update: <InMemory as StateBackend>::Transaction) -> error::Result<()> {
+	fn update_storage(&mut self, update: <InMemory as StateBackend>::StorageTransaction) -> error::Result<()> {
 		self.new_state = Some(self.old_state.update(update));
+		Ok(())
+	}
+
+	fn update_changes_trie(&mut self, _update: <InMemory as StateBackend>::ChangesTrieTransaction) -> error::Result<()> {
+		// TODO
 		Ok(())
 	}
 

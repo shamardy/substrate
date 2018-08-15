@@ -19,6 +19,8 @@
 use std::{error, fmt};
 use std::collections::HashMap;
 use std::sync::Arc;
+use changes_trie::{ChangesTrieStorage, ChangesTrieNode, compute_changes_trie_root};
+use overlayed_changes::OverlayedChanges;
 use trie_backend::{TryIntoTrieBackend, TrieBackend};
 
 /// A state backend is used to read state data and can have changes committed
@@ -29,8 +31,13 @@ pub trait Backend: TryIntoTrieBackend {
 	/// An error type when fetching data is not possible.
 	type Error: super::Error;
 
-	/// Changes to be applied if committing
-	type Transaction;
+	/// Storage changes to be applied if committing
+	type StorageTransaction;
+	/// Changes to changes trie to be applied if committing.
+	type ChangesTrieTransaction;
+
+	/// Get reference to read-only changes trie storage.
+	fn changes_trie_storage(&self) -> Option<&ChangesTrieStorage>;
 
 	/// Get keyed storage associated with specific address, or None if there is nothing associated.
 	fn storage(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error>;
@@ -46,8 +53,12 @@ pub trait Backend: TryIntoTrieBackend {
 
 	/// Calculate the storage root, with given delta over what is already stored in
 	/// the backend, and produce a "transaction" that can be used to commit.
-	fn storage_root<I>(&self, delta: I) -> ([u8; 32], Self::Transaction)
+	fn storage_root<I>(&self, delta: I) -> ([u8; 32], Self::StorageTransaction)
 		where I: IntoIterator<Item=(Vec<u8>, Option<Vec<u8>>)>;
+
+	/// Calculate the changes trie root for given overlay and produce a "transaction"
+	/// that can be used to commit.
+	fn changes_trie_root(&self, overlay: &OverlayedChanges) -> Option<([u8; 32], Self::ChangesTrieTransaction)>;
 
 	/// Get all key/value pairs into a Vec.
 	fn pairs(&self) -> Vec<(Vec<u8>, Vec<u8>)>;
@@ -73,19 +84,29 @@ impl error::Error for Void {
 #[derive(Clone, PartialEq, Eq)]
 pub struct InMemory {
 	inner: Arc<HashMap<Vec<u8>, Vec<u8>>>,
+	changes_trie_storage: HashMap<u64, Vec<ChangesTrieNode>>,
 }
 
 impl Default for InMemory {
 	fn default() -> Self {
 		InMemory {
 			inner: Arc::new(Default::default()),
+			changes_trie_storage: Default::default(),
 		}
 	}
 }
 
 impl InMemory {
+	/// Create in-memory backend with given changes_trie_storage.
+	pub fn with_changes_trie_storage(changes_trie_storage: HashMap<u64, Vec<ChangesTrieNode>>) -> Self {
+		InMemory {
+			inner: Default::default(),
+			changes_trie_storage,
+		}
+	}
+
 	/// Copy the state, with applied updates
-	pub fn update(&self, changes: <Self as Backend>::Transaction) -> Self {
+	pub fn update(&self, changes: <Self as Backend>::StorageTransaction) -> Self {
 		let mut inner: HashMap<_, _> = (&*self.inner).clone();
 		for (key, val) in changes {
 			match val {
@@ -102,6 +123,7 @@ impl From<HashMap<Vec<u8>, Vec<u8>>> for InMemory {
 	fn from(inner: HashMap<Vec<u8>, Vec<u8>>) -> Self {
 		InMemory {
 			inner: Arc::new(inner),
+			changes_trie_storage: Default::default(),
 		}
 	}
 }
@@ -110,7 +132,12 @@ impl super::Error for Void {}
 
 impl Backend for InMemory {
 	type Error = Void;
-	type Transaction = Vec<(Vec<u8>, Option<Vec<u8>>)>;
+	type StorageTransaction = Vec<(Vec<u8>, Option<Vec<u8>>)>;
+	type ChangesTrieTransaction = Vec<(Vec<u8>, Vec<u8>)>;
+
+	fn changes_trie_storage(&self) -> Option<&ChangesTrieStorage> {
+		Some(self)
+	}
 
 	fn storage(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
 		Ok(self.inner.get(key).map(Clone::clone))
@@ -124,7 +151,7 @@ impl Backend for InMemory {
 		self.inner.keys().filter(|key| key.starts_with(prefix)).map(|k| &**k).for_each(f);
 	}
 
-	fn storage_root<I>(&self, delta: I) -> ([u8; 32], Self::Transaction)
+	fn storage_root<I>(&self, delta: I) -> ([u8; 32], Self::StorageTransaction)
 		where I: IntoIterator<Item=(Vec<u8>, Option<Vec<u8>>)>
 	{
 		let existing_pairs = self.inner.iter().map(|(k, v)| (k.clone(), Some(v.clone())));
@@ -139,8 +166,18 @@ impl Backend for InMemory {
 		(root, transaction)
 	}
 
+	fn changes_trie_root(&self, overlay: &OverlayedChanges) -> Option<([u8; 32], Self::ChangesTrieTransaction)> {
+		compute_changes_trie_root(self, overlay)
+	}
+
 	fn pairs(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
 		self.inner.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+	}
+}
+
+impl ChangesTrieStorage for InMemory {
+	fn enumerate_trie_nodes(&self, block: u64) -> Box<Iterator<Item = ChangesTrieNode>> {
+		Box::new(self.changes_trie_storage.get(&block).cloned().unwrap_or_default().into_iter())
 	}
 }
 

@@ -254,6 +254,11 @@ impl<Block: BlockT> client::backend::BlockImportOperation<Block> for BlockImport
 		self.updates = update;
 		Ok(())
 	}
+
+	fn update_changes_trie(&mut self, _update: ()) -> Result<(), client::error::Error> {
+		// TODO
+		Ok(())
+	}
 }
 
 struct StorageDb<Block: BlockT> {
@@ -492,6 +497,7 @@ mod tests {
 						db.blockchain.hash(i - 1).unwrap().unwrap()
 					},
 					state_root: Default::default(),
+					changes_root: Default::default(),
 					digest: Default::default(),
 					extrinsics_root: Default::default(),
 				};
@@ -518,6 +524,7 @@ mod tests {
 				number: 0,
 				parent_hash: Default::default(),
 				state_root: Default::default(),
+				changes_root: Default::default(),
 				digest: Default::default(),
 				extrinsics_root: Default::default(),
 			};
@@ -557,6 +564,7 @@ mod tests {
 				number: 1,
 				parent_hash: Default::default(),
 				state_root: Default::default(),
+				changes_root: Default::default(),
 				digest: Default::default(),
 				extrinsics_root: Default::default(),
 			};
@@ -598,6 +606,7 @@ mod tests {
 				number: 0,
 				parent_hash: Default::default(),
 				state_root: Default::default(),
+				changes_root: Default::default(),
 				digest: Default::default(),
 				extrinsics_root: Default::default(),
 			};
@@ -633,6 +642,7 @@ mod tests {
 				number: 1,
 				parent_hash: hash,
 				state_root: Default::default(),
+				changes_root: Default::default(),
 				digest: Default::default(),
 				extrinsics_root: Default::default(),
 			};
@@ -667,6 +677,7 @@ mod tests {
 				number: 2,
 				parent_hash: hash,
 				state_root: Default::default(),
+				changes_root: Default::default(),
 				digest: Default::default(),
 				extrinsics_root: Default::default(),
 			};

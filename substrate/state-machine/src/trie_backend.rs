@@ -20,6 +20,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use hashdb::HashDB;
 use memorydb::MemoryDB;
+use changes_trie::{ChangesTrieStorage, compute_changes_trie_root};
+use overlayed_changes::OverlayedChanges;
 use patricia_trie::{TrieDB, TrieDBMut, TrieError, Trie, TrieMut};
 use {Backend};
 pub use ethereum_types::H256 as TrieH256;
@@ -86,7 +88,12 @@ impl super::Error for String {}
 
 impl Backend for TrieBackend {
 	type Error = String;
-	type Transaction = MemoryDB;
+	type StorageTransaction = MemoryDB;
+	type ChangesTrieTransaction = ();
+
+	fn changes_trie_storage(&self) -> Option<&ChangesTrieStorage> {
+		self.storage.changes_trie_storage()
+	}
 
 	fn storage(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
 		let mut read_overlay = MemoryDB::default();
@@ -185,6 +192,10 @@ impl Backend for TrieBackend {
 
 		(root.0.into(), write_overlay)
 	}
+
+	fn changes_trie_root(&self, overlay: &OverlayedChanges) -> Option<([u8; 32], ())> {
+		compute_changes_trie_root(self, overlay).map(|(root, _)| (root, ()))
+	}
 }
 
 impl TryIntoTrieBackend for TrieBackend {
@@ -265,6 +276,10 @@ impl TrieBackendStorage {
 			TrieBackendStorage::MemoryDb(ref db) =>
 				Ok(db.get(key)),
 		}
+	}
+
+	pub fn changes_trie_storage(&self) -> Option<&ChangesTrieStorage> {
+		None // unimplemented!("TODO")
 	}
 }
 

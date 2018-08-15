@@ -20,6 +20,8 @@ use std::cell::RefCell;
 use ethereum_types::H256 as TrieH256;
 use hashdb::HashDB;
 use memorydb::MemoryDB;
+use changes_trie::ChangesTrieStorage;
+use overlayed_changes::OverlayedChanges;
 use patricia_trie::{TrieDB, TrieError, Trie, Recorder};
 use trie_backend::{TrieBackend, Ephemeral};
 use {Error, ExecutionError, Backend, TryIntoTrieBackend};
@@ -52,7 +54,12 @@ impl ProvingBackend {
 
 impl Backend for ProvingBackend {
 	type Error = String;
-	type Transaction = MemoryDB;
+	type StorageTransaction = MemoryDB;
+	type ChangesTrieTransaction = ();
+
+	fn changes_trie_storage(&self) -> Option<&ChangesTrieStorage> {
+		self.backend.changes_trie_storage()
+	}
 
 	fn storage(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
 		let mut read_overlay = MemoryDB::default();
@@ -81,6 +88,10 @@ impl Backend for ProvingBackend {
 		where I: IntoIterator<Item=(Vec<u8>, Option<Vec<u8>>)>
 	{
 		self.backend.storage_root(delta)
+	}
+
+	fn changes_trie_root(&self, overlay: &OverlayedChanges) -> Option<([u8; 32], ())> {
+		self.backend.changes_trie_root(overlay)
 	}
 }
 
